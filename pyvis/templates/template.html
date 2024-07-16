@@ -438,6 +438,7 @@
                   allNodes = nodes.get({ returnType: "Object" });
                   for (nodeId in allNodes) {
                     nodeColors[nodeId] = allNodes[nodeId].color;
+                    allNodes[nodeId].hidden = (allNodes[nodeId].type !== 'particle');
                   }
                   allEdges = edges.get({ returnType: "Object" });
                   // adding nodes and edges to the graph
@@ -455,7 +456,164 @@
                   {% endif %}
 
                   network = new vis.Network(container, data, options);
+                  function lokicollapse(baseNode, allNodes, clickedNode){
+                    // function to recursively hide all nodes connected to a loki tool
+                    connectedNodes = network.getConnectedNodes(baseNode);
+                    if (allNodes[baseNode].hidden) {
+                        allNodes[baseNode].hidden = false;
+                        return allNodes;
+                    }
+                    else{
+                        for (let i = 0; i < connectedNodes.length; i++) {
+                            if (allNodes[connectedNodes[i]].type === 'particle') {
+                                //dont hide anything if its a particle
+                                continue;
+                            }
+                            if (allNodes[connectedNodes[i]].hidden && !clickedNode){
+                                //if daughter nodes are hidden and tool is not the clicked node, do nothing
+                                continue;
+                            }
+                            if (allNodes[connectedNodes[i]].loki){
+                                if (allNodes[connectedNodes[i]].hidden){
+                                    // unhide them
+                                    allNodes[connectedNodes[i]].hidden = false;                  
+                                }
+                                else{ 
+                                    // hide all nodes connected to the loki tool
+                                    secondConnectedNodes = network.getConnectedNodes(connectedNodes[i]);
+                                    for (let j = 0; j < secondConnectedNodes.length; j++){
+                                        
+                                        if (allNodes[secondConnectedNodes[j]].type === 'tupletool') {
+                                            continue;
+                                        }
+                                        if (!allNodes[secondConnectedNodes[j]].hidden) {
+                                            thirdConnectedNodes = network.getConnectedNodes(secondConnectedNodes[j]);
+                                            for (let k = 0; k < thirdConnectedNodes.length; k++){
+                                                    console.log(allNodes[thirdConnectedNodes[k]])
+                                                if (allNodes[thirdConnectedNodes[k]] === allNodes[secondConnectedNodes[j]]){
+                                                    continue;
+                                                }
+                                                else {
+                                                    if (allNodes[thirdConnectedNodes[k]].hidden) {
+                                                        continue;
+                                                    }
+                                                    else {
+                                                        allNodes[thirdConnectedNodes[k]].hidden = true;
+                                                    }
+                                                }
+                                            }
+                                        allNodes[secondConnectedNodes[j]].hidden = true;
+                                        }
+                                        
+                                    }
+                                    allNodes[connectedNodes[i]].hidden = true;
+                                }
+                            }
+                        }
+                    }
+                    if (!clickedNode) {
+                        allNodes[baseNode].hidden = true;
+                        }
+                    return allNodes;
+                  }
 
+                  function collapseNode(params) {
+                    // function to hide/show nodes when double clicked
+                    allNodes = nodes.get({ returnType: "Object" });
+                    if (params.nodes.length > 0) {
+                        var selectedNode = params.nodes[0];
+                        var connectedNodes = network.getConnectedNodes(selectedNode);
+                        // if the selected node is an option etc., do nothing
+                        if (allNodes[selectedNode].type !== 'particle' && allNodes[selectedNode].type !== 'tupletool' && !allNodes[selectedNode].loki && allNodes[selectedNode].type !== 'loki_variable') {
+                            console.log("Test")
+                            console.log(allNodes[selectedNode])
+                            return;
+                        }
+                        if (allNodes[selectedNode].loki){
+                            console.log(allNodes[selectedNode])
+                            for (let i = 0; i < connectedNodes.length; i++){
+                                if (allNodes[connectedNodes[i]].type === 'tupletool') {
+                                    continue;
+                                }
+                                if (allNodes[connectedNodes[i]].hidden) {
+                                    allNodes[connectedNodes[i]].hidden = false;
+                                }
+                                else {
+                                    secondConnectedNodes = network.getConnectedNodes(connectedNodes[i]);
+                                    for (let j = 0; j < secondConnectedNodes.length; j++){
+                                        if (allNodes[secondConnectedNodes[j]] === allNodes[selectedNode]){
+                                            continue;
+                                        }
+                                        else {
+                                            if (allNodes[secondConnectedNodes[j]].hidden) {
+                                                continue;
+                                            }
+                                            else {
+                                                allNodes[secondConnectedNodes[j]].hidden = true;
+                                            }
+                                        }
+                                    }
+                                    
+                                    allNodes[connectedNodes[i]].hidden = true;
+                                }
+                                
+
+                            }
+                        }
+                        else {
+                            if (allNodes[selectedNode].type === 'loki_variable'){
+                                for (let i = 0; i < connectedNodes.length; i++){
+                                    if (allNodes[connectedNodes[i]].loki) {
+                                        continue;
+                                    }
+                                    allNodes[connectedNodes[i]].hidden = !allNodes[connectedNodes[i]].hidden;
+                                }
+                            }
+                            else {
+                                if (allNodes[selectedNode].lokitool){
+                                    allNodes = lokicollapse(selectedNode, allNodes, true);
+                                }
+                                else{
+                                    for (let i = 0; i < connectedNodes.length; i++) {
+                                        console.log(allNodes[connectedNodes[i]])
+                                        // check if connected node is a particle, if yes dont hide it
+                                        if (allNodes[connectedNodes[i]].type === 'particle') {
+                                            continue;
+                                        }
+                                        else if (allNodes[connectedNodes[i]].lokitool){
+                                            allNodes = lokicollapse(connectedNodes[i], allNodes, false);
+                                            console.log(allNodes[connectedNodes[i]])
+                                            continue;
+                                        }
+                                        // if node is blue (TupleTool), hide all daughters too
+                                        else if (allNodes[connectedNodes[i]].type === 'tupletool' && !allNodes[connectedNodes[i]].lokitool) {
+                                            var daughters = network.getConnectedNodes(connectedNodes[i]);
+                                            for (let j = 0; j < daughters.length; j++) {
+                                                if (allNodes[daughters[j]].type === 'particle') {
+                                                    continue;
+                                                }
+                                                allNodes[daughters[j]].hidden = true;
+                                            }
+                                        
+                                        }
+                                        // if hidden, unhide and vice versa
+                                        console.log(allNodes[connectedNodes[i]])
+                                        allNodes[connectedNodes[i]].hidden = !allNodes[connectedNodes[i]].hidden;
+                                        
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    var updateArray = [];
+                    for (let nodeId in allNodes) {
+                        if (allNodes.hasOwnProperty(nodeId)) {
+                            updateArray.push(allNodes[nodeId]);
+                        }
+                    }
+                    nodes.update(updateArray);
+                }
+                network.on("doubleClick",collapseNode);
                   {% if neighborhood_highlight %}
                     network.on("click", neighbourhoodHighlight);
                   {% endif %}
@@ -552,6 +710,7 @@
 
               }
               drawGraph();
+
         </script>
     </body>
 </html>
